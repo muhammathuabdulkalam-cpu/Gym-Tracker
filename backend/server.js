@@ -17,10 +17,14 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // ── Database name MUST be in URI for Atlas M0 clusters ──
-const DB_URI = 'mongodb+srv://muhammathuabdulkalam_db_user:Afzal1234@gym.oqb41nz.mongodb.net/gymdb?retryWrites=true&w=majority&appName=GYM';
+const DB_URI = process.env.DB_URI;
+if (!DB_URI) {
+  console.error('❌ Missing DB_URI in environment. Set DB_URI in backend/.env or in your environment variables.');
+  process.exit(1);
+}
 
 // ── Connect (or reconnect) helper ──
 let connecting = false;
