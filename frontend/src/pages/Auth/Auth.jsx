@@ -9,7 +9,7 @@ const loginIllustration = {
   title: 'Track Every Rep.',
   subtitle: 'Your progress, your splits, your macros — all in one place.',
   gradient: 'from-primary via-blue-500 to-cyan-400',
-  icon: <Dumbbell className="w-20 h-20 text-white/20" />,
+  icon: <Dumbbell className="w-16 h-16 sm:w-20 sm:h-20 text-white/20" />,
   stats: [
     { label: 'Workouts Logged', value: '10k+', icon: <Dumbbell className="w-4 h-4" /> },
     { label: 'Calories Tracked', value: '2M+', icon: <Zap className="w-4 h-4" /> },
@@ -21,7 +21,7 @@ const signupIllustration = {
   title: 'Your Journey Starts Here.',
   subtitle: 'Build your custom split, log weights, and crush your goals daily.',
   gradient: 'from-accent via-purple-500 to-pink-400',
-  icon: <BarChart2 className="w-20 h-20 text-white/20" />,
+  icon: <BarChart2 className="w-16 h-16 sm:w-20 sm:h-20 text-white/20" />,
   stats: [
     { label: 'Custom Splits', value: '∞', icon: <Shield className="w-4 h-4" /> },
     { label: 'Analytics', value: 'Live', icon: <BarChart2 className="w-4 h-4" /> },
@@ -40,7 +40,7 @@ const IllustrationPanel = ({ isLogin }) => {
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: isLogin ? 60 : -60 }}
         transition={{ duration: 0.55, type: 'spring', bounce: 0.2 }}
-        className={`relative flex flex-col items-center justify-center h-full p-10 rounded-2xl overflow-hidden bg-gradient-to-br ${data.gradient}`}
+        className={`relative flex flex-col items-center justify-center h-auto min-h-[280px] sm:min-h-[360px] p-6 sm:p-10 rounded-2xl overflow-hidden bg-gradient-to-br ${data.gradient}`}
       >
         {/* Subtle grid mesh overlay */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:32px_32px]" />
@@ -66,15 +66,15 @@ const IllustrationPanel = ({ isLogin }) => {
         </motion.div>
 
         {/* Headline */}
-        <h2 className="relative z-10 text-3xl font-extrabold text-white text-center mb-3 drop-shadow-lg leading-tight">
+        <h2 className="relative z-10 text-2xl sm:text-3xl font-extrabold text-white text-center mb-3 drop-shadow-lg leading-tight">
           {data.title}
         </h2>
-        <p className="relative z-10 text-white/70 text-center text-sm mb-10 max-w-xs leading-relaxed">
+        <p className="relative z-10 text-white/70 text-center text-sm sm:text-sm mb-10 max-w-full sm:max-w-xs leading-relaxed">
           {data.subtitle}
         </p>
 
         {/* Stats row */}
-        <div className="relative z-10 grid grid-cols-3 gap-3 w-full max-w-xs">
+        <div className="relative z-10 hidden sm:grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-full sm:max-w-xs">
           {data.stats.map((s) => (
             <div key={s.label} className="flex flex-col items-center bg-white/10 rounded-2xl p-3 backdrop-blur-md border border-white/10">
               <span className="text-white/60 mb-1">{s.icon}</span>
@@ -216,14 +216,14 @@ const Auth = () => {
         </div>
 
         {/* ── Two-Panel Card ── */}
-        <div className="bg-surface/70 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden min-h-[520px]">
-          <div className="grid grid-cols-1 md:grid-cols-2 h-full min-h-[520px]">
+        <div className="bg-surface/70 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden min-h-auto md:min-h-[520px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 md:h-full md:min-h-[520px]">
 
             {/* Sign In: form left | illustration right */}
             {/* Sign Up: illustration left | form right */}
 
             {/* LEFT SLOT */}
-            <div className="p-10 flex flex-col justify-center">
+            <div className="p-4 md:p-10 flex flex-col md:justify-center justify-start">
               {isLogin ? (
                 <FormPanel {...formProps} />
               ) : (
@@ -232,7 +232,7 @@ const Auth = () => {
             </div>
 
             {/* RIGHT SLOT */}
-            <div className="p-10 flex flex-col justify-center bg-white/[0.02] border-l border-white/5">
+            <div className="p-4 md:p-10 flex flex-col md:justify-center justify-start bg-white/[0.02] border-l border-white/5">
               {isLogin ? (
                 <IllustrationPanel isLogin={isLogin} />
               ) : (
