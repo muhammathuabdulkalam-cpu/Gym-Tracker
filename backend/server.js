@@ -65,6 +65,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/fitness', fitnessRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/food', foodRoutes);
+app.use('/api/custom-food', customFoodRoutes);
 app.use('/api/weight', weightRoutes);
 app.use('/api/cardio', cardioRoutes);
 
