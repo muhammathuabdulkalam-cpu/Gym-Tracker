@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { fetchFitnessData, saveFitnessData } from '../api';
+import { fetchFitnessData, saveFitnessData, fetchFoodLogs, fetchWorkouts, fetchCardioLogs } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import {
@@ -52,13 +52,91 @@ const Dashboard = () => {
   const [quickWeight, setQuickWeight] = useState('');
   const [savingWeight, setSavingWeight] = useState(false);
 
-  const loadData = () => {
-    fetchFitnessData()
-      .then(data => { setAllData(data || []); setLoading(false); })
-      .catch(() => setLoading(false));
+  const mergeAnalyticsData = (fitnessData, foodLogs, cardioLogs, workouts) => {
+    const map = new Map();
+    const ensure = (date) => {
+      if (!map.has(date)) {
+        map.set(date, {
+          date,
+          fitnessCalories: 0,
+          foodCalories: 0,
+          cardioCalories: 0,
+          fitnessSteps: 0,
+          cardioSteps: 0,
+          weight: null,
+          workoutCount: 0,
+        });
+      }
+      return map.get(date);
+    };
+
+    (Array.isArray(fitnessData) ? fitnessData : []).forEach((item) => {
+      const row = ensure(item.date);
+      row.fitnessCalories += Number(item.calories) || 0;
+      row.fitnessSteps += Number(item.steps) || 0;
+      if (item.weight !== undefined && item.weight !== null) row.weight = item.weight;
+    });
+
+    (Array.isArray(foodLogs) ? foodLogs : []).forEach((log) => {
+      const row = ensure(log.date);
+      row.foodCalories += Number(log.totalCalories) || 0;
+    });
+
+    (Array.isArray(cardioLogs) ? cardioLogs : []).forEach((log) => {
+      const row = ensure(log.date);
+      row.cardioCalories += Number(log.caloriesBurned) || 0;
+      row.cardioSteps += Number(log.steps) || 0;
+    });
+
+    (Array.isArray(workouts) ? workouts : []).forEach((workout) => {
+      const row = ensure(workout.date);
+      row.workoutCount += 1;
+      row.workoutVolume = (row.workoutVolume || 0) + (workout.exercises || []).reduce((sum, exercise) => {
+        return sum + (exercise.sets || []).reduce((setSum, set) => setSum + ((Number(set.reps) || 0) * (Number(set.weight) || 0)), 0);
+      }, 0);
+    });
+
+    return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        calories: (row.foodCalories || row.fitnessCalories || 0) + (row.cardioCalories || 0),
+        steps: (row.fitnessSteps || 0) + (row.cardioSteps || 0),
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
   };
 
-  useEffect(() => { loadData(); }, []);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [fitnessData, foodLogs, cardioLogs, workouts] = await Promise.all([
+        fetchFitnessData(),
+        fetchFoodLogs(),
+        fetchCardioLogs(),
+        fetchWorkouts(),
+      ]);
+      setAllData(mergeAnalyticsData(fitnessData, foodLogs, cardioLogs, workouts));
+    } catch (err) {
+      console.error('Dashboard analytics fetch failed:', err);
+      setAllData([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  const displayData = useMemo(() => {
+    if (!allData.length) return [];
+    const sorted = [...allData].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const mapped = sorted.map((d) => ({
+      ...d,
+      label: new Date(d.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+    }));
+    return filtered.length ? filtered : mapped;
+  }, [allData, filtered]);
 
   const handleQuickWeightSave = async () => {
     if (!quickWeight || isNaN(quickWeight)) return;
@@ -89,7 +167,7 @@ const Dashboard = () => {
     setFiltered(applyFilter(allData, filter));
   }, [allData, filter, applyFilter]);
 
-  const latest = filtered.at(-1);
+  const latest = displayData.at(-1);
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }} className="space-y-8 relative z-10 pb-20">
@@ -147,7 +225,7 @@ const Dashboard = () => {
       )}
 
       {/* Charts */}
-      {filtered.length > 0 && (
+      {allData.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Calories Chart */}
           <div className="bg-surface/70 backdrop-blur border border-white/10 rounded-3xl p-6">
@@ -155,7 +233,7 @@ const Dashboard = () => {
               <Flame className="w-5 h-5 text-orange-500" /> Calorie Trend
             </h2>
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={filtered}>
+              <AreaChart data={displayData}>
                 <defs>
                   <linearGradient id="calGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
@@ -185,7 +263,7 @@ const Dashboard = () => {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={filtered}>
+              <AreaChart data={displayData}>
                 <defs>
                   <linearGradient id="wtGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
@@ -207,7 +285,7 @@ const Dashboard = () => {
               <Activity className="w-5 h-5 text-primary" /> Steps — {filter}
             </h2>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={filtered}>
+              <BarChart data={displayData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" />
                 <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 11 }} />
                 <YAxis tick={{ fill: '#71717a', fontSize: 11 }} />
