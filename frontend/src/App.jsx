@@ -16,7 +16,7 @@ const AppContent = () => {
   const { user } = useAuth();
   
   return (
-    <div className="min-h-screen text-white font-sans overflow-x-hidden selection:bg-primary/30 selection:text-white relative flex flex-col">
+    <div className="min-h-screen text-white font-sans overflow-x-hidden selection:bg-primary/30 selection:text-white relative flex flex-col h-screen">
       <ToastContainer
         theme="dark"
         position="bottom-right"
@@ -32,7 +32,7 @@ const AppContent = () => {
       />
       <AnimatedBackground />
       {user && <NavBar />}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 relative z-10 flex-1 pb-24 lg:pb-12">
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 relative z-10 pb-24 lg:pb-12 min-h-[calc(100vh-80px)] md:flex-1 md:overflow-y-auto mobile-scroll-fix">
         <Routes>
           <Route path="/login" element={!user ? <Auth /> : <Navigate to="/" />} />
           <Route path="/signup" element={!user ? <Auth /> : <Navigate to="/" />} />

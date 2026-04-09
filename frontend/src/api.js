@@ -32,6 +32,11 @@ export const fetchFoodLogs = async (date) => (await api.get('/food', { params: d
 export const saveFoodLog = async (data) => (await api.post('/food', data)).data;
 export const deleteFoodLog = async (id) => (await api.delete(`/food/${id}`)).data;
 
+// Custom food endpoints
+export const fetchCustomFoods = async () => (await api.get('/custom-food')).data;
+export const saveCustomFood = async (data) => (await api.post('/custom-food', data)).data;
+export const deleteCustomFood = async (id) => (await api.delete(`/custom-food/${id}`)).data;
+
 // Weight log endpoints
 export const fetchWeightLogs = async () => (await api.get('/weight')).data;
 export const saveWeightLog = async (data) => (await api.post('/weight', data)).data;

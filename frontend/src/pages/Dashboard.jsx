@@ -32,7 +32,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color, delay = 0 }) => (
 );
 
 const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length) return ;
   return (
     <div className="bg-surface/95 backdrop-blur border border-white/10 rounded-xl p-3 shadow-xl text-sm">
       <p className="text-zinc-400 mb-1 font-medium">{label}</p>
@@ -63,7 +63,7 @@ const Dashboard = () => {
           cardioCalories: 0,
           fitnessSteps: 0,
           cardioSteps: 0,
-          weight: null,
+          weight: 0,
           workoutCount: 0,
         });
       }

@@ -5,6 +5,42 @@
 @tailwind utilities;
 
 @layer base {
+  html, body {
+    height: 100%;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Mobile viewport fixes */
+  @media (max-width: 768px) {
+    html, body {
+      height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    
+    body {
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      position: relative;
+    }
+    
+    /* Ensure main content can scroll */
+    main {
+      min-height: calc(100vh - 80px); /* Account for navbar */
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+    }
+    
+    /* Fix for mobile scrolling issues */
+    .mobile-scroll-fix {
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      overflow-y: auto;
+    }
+  }
+  
   body {
     @apply bg-background text-white antialiased selection:bg-primary/30;
   }
