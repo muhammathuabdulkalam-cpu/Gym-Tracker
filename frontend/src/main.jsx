@@ -1,8 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { registerSW } from 'virtual:pwa-register'   // ✅ ADD THIS
 import './index.css'
 import App from './App.jsx'
 import 'react-toastify/dist/ReactToastify.css';
+
+// ✅ REGISTER SERVICE WORKER
+registerSW({ immediate: true });
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
