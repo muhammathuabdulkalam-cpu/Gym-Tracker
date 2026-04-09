@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Scale, UtensilsCrossed, Dumbbell, Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { confirmAction } from '../utils/toastConfirm';
-import ProfileImage from '../assets/tranzio_logo.png';
+import ProfileImage from "../assets/tranzio_logo.png";
+
 
 const NAV_LINKS = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -44,7 +45,7 @@ const NavBar = () => {
 
   return (
     <>
-      {/* Desktop Top Nav - Premium Borderless */}
+      {/* Desktop Top Nav - Premium Borderless (Kept as requested) */}
       <nav className="sticky top-0 z-50 backdrop-blur-2xl bg-[#0a0a0a] hidden lg:block shadow-lg shadow-black/5">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
@@ -195,34 +196,41 @@ const NavBar = () => {
         </div>
       </nav>
 
-      {/* Mobile Header */}
-      <header className="lg:hidden sticky top-0 z-50 backdrop-blur-2xl bg-[#0a0a0a] shadow-lg shadow-black/5">
-        <div className="flex items-center justify-between h-14 px-4">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 flex-1">
-            <img 
-              src={ProfileImage} 
-              alt="Tranzio Logo" 
-              style={{height:"50px"}}
-              className="h-8 w-auto object-contain"
-            />
+      {/* Improved Mobile Header */}
+      <header className="lg:hidden sticky top-0 z-50 bg-[#050505] border-b border-white/5">
+        <div className="flex items-center justify-between h-16 px-5">
+          {/* Logo with Glow Effect */}
+          <Link to="/" className="flex items-center flex-1">
+            <div className="relative">
+              <div className="absolute -inset-2 bg-purple-500/20 blur-xl rounded-full opacity-50" />
+              <img 
+                src={ProfileImage}
+                style={{height:"50px"}}
+                alt="Tranzio Logo" 
+                className="h-9 w-auto object-contain relative z-10"
+              />
+            </div>
           </Link>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
-            {/* Profile */}
+          <div className="flex items-center gap-3">
+            {/* Profile with Ring Effect */}
             <div className="relative" ref={profileRef}>
               <motion.button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="p-1.5 rounded-xl hover:bg-white/5 transition-all duration-300"
-                whileTap={{ scale: 0.95 }}
+                className="relative p-0.5 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600"
+                whileTap={{ scale: 0.9 }}
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs overflow-hidden">
-                  {user?.profileImage ? (
-                    <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    user?.name ? user.name[0].toUpperCase() : 'U'
-                  )}
+                <div className="w-9 h-9 rounded-full bg-[#050505] p-0.5">
+                  <div className="w-full h-full rounded-full overflow-hidden">
+                    {user?.profileImage ? (
+                      <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+                        {user?.name ? user.name[0].toUpperCase() : 'U'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.button>
 
@@ -230,55 +238,21 @@ const NavBar = () => {
               <AnimatePresence>
                 {isProfileOpen && (
                   <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                    className="absolute right-0 top-full mt-3 w-64 bg-gradient-to-b from-slate-950/95 via-purple-950/90 to-slate-950/95 backdrop-blur-3xl rounded-3xl shadow-2xl shadow-purple-900/50 overflow-hidden border border-purple-500/30"
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 top-full mt-4 w-64 bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-[60]"
                   >
-                    {/* Header Section */}
-                    <div className="px-5 py-4 bg-gradient-to-b from-purple-600/25 via-purple-500/15 to-transparent border-b border-purple-500/20">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 via-purple-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm overflow-hidden shadow-lg shadow-purple-600/40 ring-2 ring-purple-300/30">
-                          {user?.profileImage ? (
-                            <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
-                          ) : (
-                            user?.name ? user.name[0].toUpperCase() : 'U'
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{user?.name || 'User'}</p>
-                          <p className="text-xs text-purple-300/80 truncate mt-1">{user?.email || 'user@email.com'}</p>
-                        </div>
-                      </div>
+                    <div className="p-5 border-b border-white/5 bg-gradient-to-b from-purple-500/10 to-transparent">
+                      <p className="text-sm font-bold text-white truncate">{user?.name || 'User'}</p>
+                      <p className="text-xs text-zinc-500 truncate mt-0.5">{user?.email || 'user@email.com'}</p>
                     </div>
-
-                    {/* Menu Items */}
-                    <div className="py-3 px-3 space-y-1">
-                      <Link
-                        to="/settings"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-sm text-zinc-200 hover:text-white bg-gradient-to-r from-purple-500/0 to-indigo-500/0 hover:from-purple-500/20 hover:to-indigo-500/20 rounded-2xl transition-all duration-250 border border-transparent hover:border-purple-500/30 font-medium"
-                      >
+                    <div className="p-2">
+                      <Link to="/settings" className="flex items-center gap-3 p-3 text-sm text-zinc-300 hover:bg-white/5 rounded-2xl transition-colors">
                         <User className="w-4 h-4 text-purple-400" />
-                        <span>Profile Settings</span>
+                        <span>Profile</span>
                       </Link>
-                      <Link
-                        to="/settings"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-sm text-zinc-200 hover:text-white bg-gradient-to-r from-purple-500/0 to-indigo-500/0 hover:from-purple-500/20 hover:to-indigo-500/20 rounded-2xl transition-all duration-250 border border-transparent hover:border-purple-500/30 font-medium"
-                      >
-                        <Settings className="w-4 h-4 text-purple-400" />
-                        <span>Preferences</span>
-                      </Link>
-                    </div>
-
-                    {/* Logout Section */}
-                    <div className="py-3 px-3 border-t border-purple-500/20">
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-3 px-4 py-3 text-sm text-red-300 hover:text-red-200 bg-gradient-to-r from-red-500/0 to-red-500/0 hover:from-red-500/20 hover:to-red-500/15 rounded-2xl transition-all duration-250 border border-transparent hover:border-red-500/30 w-full font-medium"
-                      >
+                      <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 text-sm text-red-400 hover:bg-red-500/5 rounded-2xl transition-colors">
                         <LogOut className="w-4 h-4" />
                         <span>Sign Out</span>
                       </button>
@@ -291,7 +265,7 @@ const NavBar = () => {
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation */}
+      {/* Reverted Mobile Bottom Navigation (Original Style) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 backdrop-blur-2xl bg-[#0a0a0a] border-t border-white/5 safe-area-pb">
         <div className="flex items-stretch h-16">
           {NAV_LINKS.map((link) => {
