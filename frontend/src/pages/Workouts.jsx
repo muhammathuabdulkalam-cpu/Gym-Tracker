@@ -1,11 +1,83 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { fetchWorkouts, saveWorkout, updateProfile, fetchCardioLogs, saveCardioLog, deleteCardioLog } from '../api';
-import { Dumbbell, Plus, Save, Loader2, Calendar, Trash2, TrendingUp, X, Settings2, Activity, Flame, Timer, Footprints } from 'lucide-react';
+import { Dumbbell, Plus, Save, Loader2, Calendar, Trash2, TrendingUp, X, Settings2, Activity, Flame, Timer, Footprints, Play, Square, CheckCircle2, Radio } from 'lucide-react';
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'react-toastify';
 import { confirmAction } from '../utils/toastConfirm';
+
+/* ─── Custom Pedometer Hook (DeviceMotionEvent-based) ─────────── */
+// Uses accelerometer magnitude to detect steps via peak detection,
+// similar to how Google Fit and pedometer apps work.
+function usePedometer() {
+  const [steps, setSteps] = useState(0);
+  const [isTracking, setIsTracking] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [supported, setSupported] = useState(null);
+
+  const listenerRef = useRef(null);
+  const timerRef = useRef(null);
+  const lastMagRef = useRef(0);
+  const stepCooldownRef = useRef(false);
+  const THRESHOLD = 1.8; // m/s² diff to count a step
+
+  useEffect(() => {
+    setSupported(typeof window !== 'undefined' && 'DeviceMotionEvent' in window);
+  }, []);
+
+  const start = useCallback(async () => {
+    // iOS 13+ requires explicit permission
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      try {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm !== 'granted') {
+          toast.warn('Motion sensor permission denied. Steps cannot be counted.', { theme: 'dark' });
+          return;
+        }
+      } catch {
+        toast.error('Could not request motion permission.', { theme: 'dark' });
+        return;
+      }
+    }
+
+    setSteps(0);
+    setElapsedSeconds(0);
+    setIsTracking(true);
+    const startTime = Date.now();
+
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    listenerRef.current = (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (!a) return;
+      const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
+      const diff = Math.abs(mag - lastMagRef.current);
+      lastMagRef.current = mag;
+      if (diff > THRESHOLD && !stepCooldownRef.current) {
+        setSteps(s => s + 1);
+        stepCooldownRef.current = true;
+        setTimeout(() => { stepCooldownRef.current = false; }, 350);
+      }
+    };
+    window.addEventListener('devicemotion', listenerRef.current);
+  }, []);
+
+  const stop = useCallback(() => {
+    if (listenerRef.current) { window.removeEventListener('devicemotion', listenerRef.current); listenerRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setIsTracking(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (listenerRef.current) window.removeEventListener('devicemotion', listenerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, []);
+
+  return { steps, isTracking, elapsedSeconds, supported, start, stop };
+}
 
 /* ─── MET values for common cardio activities ─────────────────── */
 const CARDIO_ACTIVITIES = [
@@ -99,17 +171,31 @@ const CardioTab = ({ userWeight }) => {
   const [cardioLogs, setCardioLogs] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  const ped = usePedometer();
+  const weight = userWeight || 70;
+
   const loadLogs = () => fetchCardioLogs().then(data => setCardioLogs(data)).catch(() => {});
   useEffect(() => { loadLogs(); }, []);
 
-  const weight = userWeight || 70; // fallback 70kg
+  // When tracking stops, auto-fill steps and duration
+  const prevTracking = useRef(false);
+  useEffect(() => {
+    if (prevTracking.current && !ped.isTracking && ped.steps > 0) {
+      setSteps(String(ped.steps));
+      setDuration(String(Math.max(1, Math.round(ped.elapsedSeconds / 60))));
+    }
+    prevTracking.current = ped.isTracking;
+  }, [ped.isTracking, ped.steps, ped.elapsedSeconds]);
 
   const estimatedCal = useMemo(() => {
-    if (steps && Number(steps) > 0) {
-      return estimateStepCalories(Number(steps), weight);
-    }
+    if (steps && Number(steps) > 0) return estimateStepCalories(Number(steps), weight);
     return estimateCalories(activity, weight, Number(duration));
   }, [activity, duration, steps, weight]);
+
+  const liveCal = useMemo(() => {
+    if (ped.isTracking && ped.steps > 0) return estimateStepCalories(ped.steps, weight);
+    return 0;
+  }, [ped.steps, ped.isTracking, weight]);
 
   const act = CARDIO_ACTIVITIES.find(a => a.id === activity);
 
@@ -147,17 +233,15 @@ const CardioTab = ({ userWeight }) => {
   const todayLogs = cardioLogs.filter(l => l.date === date);
   const todayCalBurned = todayLogs.reduce((s, l) => s + l.caloriesBurned, 0);
 
-  // Chart: last 14 days total burned
   const chartData = (() => {
     const map = {};
-    cardioLogs.forEach(l => {
-      map[l.date] = (map[l.date] || 0) + l.caloriesBurned;
-    });
+    cardioLogs.forEach(l => { map[l.date] = (map[l.date] || 0) + l.caloriesBurned; });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).slice(-14).map(([d, cal]) => ({
-      date: new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-      cal
+      date: new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }), cal
     }));
   })();
+
+  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
   return (
     <div className="space-y-6">
@@ -168,7 +252,69 @@ const CardioTab = ({ userWeight }) => {
         </div>
       )}
 
-      {/* Cardio Activity Logger */}
+      {/* ── REAL-TIME STEP TRACKER ── */}
+      <div className="bg-surface/70 backdrop-blur border border-white/10 rounded-3xl p-6 md:p-8 space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-500/20 rounded-xl"><Footprints className="w-5 h-5 text-green-400" /></div>
+            <h2 className="text-xl font-bold text-white">Step Tracker</h2>
+          </div>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${ped.supported === false ? 'bg-zinc-800 text-zinc-500' : ped.isTracking ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800/60 text-zinc-400'}`}>
+            <span className={`w-2 h-2 rounded-full ${ped.isTracking ? 'bg-green-400 animate-pulse' : ped.supported ? 'bg-zinc-500' : 'bg-red-500/50'}`} />
+            {ped.isTracking ? 'LIVE' : ped.supported === false ? 'NOT SUPPORTED' : ped.supported ? 'SENSOR READY' : 'CHECKING…'}
+          </div>
+        </div>
+
+        {/* Metrics Row */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Steps', value: ped.isTracking ? ped.steps.toLocaleString() : '—', color: 'text-white' },
+            { label: 'kcal Burned', value: ped.isTracking ? liveCal : '—', color: 'text-orange-400' },
+            { label: 'Time', value: ped.isTracking ? fmt(ped.elapsedSeconds) : '—', color: 'text-purple-400' },
+          ].map(m => (
+            <div key={m.label} className="bg-background/50 border border-white/5 rounded-2xl py-4 flex flex-col items-center gap-1">
+              <p className={`text-2xl font-black ${m.color}`}>{m.value}</p>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{m.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Live calorie pulse while tracking */}
+        {ped.isTracking && ped.steps > 0 && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-r from-green-500/20 to-emerald-500/10 border border-green-500/30 rounded-2xl p-4 text-center">
+            <p className="text-xs font-bold text-green-400 uppercase tracking-widest mb-1">🔥 Real-Time Burn</p>
+            <p className="text-4xl font-black text-green-400">{liveCal}</p>
+            <p className="text-sm text-zinc-400 mt-1">kcal · {ped.steps.toLocaleString()} steps · {weight}kg</p>
+          </motion.div>
+        )}
+
+        {/* Start / Stop button */}
+        {ped.supported === false ? (
+          <div className="text-center py-4 text-zinc-500 text-sm">
+            <p>Motion sensors not available in this browser.</p>
+            <p className="mt-1 text-xs">Open on a mobile device for real-time step tracking, or enter steps manually below.</p>
+          </div>
+        ) : (
+          <button
+            onClick={ped.isTracking ? ped.stop : ped.start}
+            className={`w-full flex items-center justify-center gap-3 py-4 font-extrabold rounded-2xl shadow-lg transition-all active:scale-95 ${ped.isTracking ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:opacity-90 shadow-red-500/20 text-white' : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:opacity-90 shadow-green-500/20 text-white'}`}
+          >
+            {ped.isTracking ? <><Square className="w-5 h-5" /> Stop & Save Steps</> : <><Play className="w-5 h-5" /> Start Step Tracking</>}
+          </button>
+        )}
+
+        {/* Captured confirmation */}
+        {!ped.isTracking && steps !== '' && (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3">
+            <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+            <p className="text-green-400 text-sm font-bold">{Number(steps).toLocaleString()} steps captured — ready to log below ↓</p>
+          </motion.div>
+        )}
+      </div>
+
+      {/* ── MANUAL LOG CARD ── */}
       <div className="bg-surface/70 backdrop-blur border border-white/10 rounded-3xl p-6 md:p-8 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h2 className="text-xl font-bold text-white">Log Cardio Session</h2>
@@ -178,7 +324,6 @@ const CardioTab = ({ userWeight }) => {
           </div>
         </div>
 
-        {/* Activity Selector */}
         <div>
           <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3">Select Activity</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
@@ -193,7 +338,6 @@ const CardioTab = ({ userWeight }) => {
           </div>
         </div>
 
-        {/* Duration + Steps inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest block mb-2 flex items-center gap-1.5"><Timer className="w-3.5 h-3.5" /> Duration (minutes)</label>
@@ -202,14 +346,13 @@ const CardioTab = ({ userWeight }) => {
               className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-orange-500/50 transition-shadow text-sm" />
           </div>
           <div>
-            <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest block mb-2 flex items-center gap-1.5"><Footprints className="w-3.5 h-3.5" /> Steps (instead of duration)</label>
+            <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest block mb-2 flex items-center gap-1.5"><Footprints className="w-3.5 h-3.5" /> Steps</label>
             <input type="number" min="0" value={steps} onChange={e => { setSteps(e.target.value); if(e.target.value) setDuration(''); }}
               placeholder="e.g. 8000"
               className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-orange-500/50 transition-shadow text-sm" />
           </div>
         </div>
 
-        {/* Live calorie preview */}
         {estimatedCal > 0 && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             className="bg-gradient-to-r from-orange-500/20 to-rose-500/10 border border-orange-500/30 rounded-2xl p-5 text-center">
