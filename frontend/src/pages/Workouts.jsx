@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 import { fetchWorkouts, saveWorkout, updateProfile, fetchCardioLogs, saveCardioLog, deleteCardioLog } from '../api';
 import { Dumbbell, Plus, Save, Loader2, Calendar, Trash2, TrendingUp, X, Settings2, Activity, Flame, Timer, Footprints, Play, Square, CheckCircle2, Radio } from 'lucide-react';
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -11,28 +12,31 @@ import { confirmAction } from '../utils/toastConfirm';
 // Uses accelerometer magnitude to detect steps via peak detection,
 // similar to how Google Fit and pedometer apps work.
 function usePedometer() {
-  const [steps, setSteps] = useState(0);
-  const [isTracking, setIsTracking] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [supported, setSupported] = useState(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [hasStartedSession, setHasStartedSession] = useState(false);
+  const [displaySteps, setDisplaySteps] = useState(0);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+
+  const sessionStepsRef = useRef(0);
+  const sessionTimeRef = useRef(0);
 
   const listenerRef = useRef(null);
   const timerRef = useRef(null);
-  const lastMagRef = useRef(0);
+  const startTimeRef = useRef(0);
+  const gravityRef = useRef(9.8);
   const stepCooldownRef = useRef(false);
-  const THRESHOLD = 1.8; // m/s² diff to count a step
 
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && 'DeviceMotionEvent' in window);
   }, []);
 
-  const start = useCallback(async () => {
-    // iOS 13+ requires explicit permission
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+  const resumeTracking = useCallback(async (isStepBased = true) => {
+    if (isStepBased && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const perm = await DeviceMotionEvent.requestPermission();
         if (perm !== 'granted') {
-          toast.warn('Motion sensor permission denied. Steps cannot be counted.', { theme: 'dark' });
+          toast.warn('Motion sensor permission denied.', { theme: 'dark' });
           return;
         }
       } catch {
@@ -41,34 +45,56 @@ function usePedometer() {
       }
     }
 
-    setSteps(0);
-    setElapsedSeconds(0);
     setIsTracking(true);
-    const startTime = Date.now();
+    setHasStartedSession(true);
+    startTimeRef.current = Date.now();
 
     timerRef.current = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+      setDisplaySeconds(sessionTimeRef.current + Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 1000);
 
-    listenerRef.current = (e) => {
-      const a = e.accelerationIncludingGravity;
-      if (!a) return;
-      const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      const diff = Math.abs(mag - lastMagRef.current);
-      lastMagRef.current = mag;
-      if (diff > THRESHOLD && !stepCooldownRef.current) {
-        setSteps(s => s + 1);
-        stepCooldownRef.current = true;
-        setTimeout(() => { stepCooldownRef.current = false; }, 350);
-      }
-    };
-    window.addEventListener('devicemotion', listenerRef.current);
+    let localSteps = 0;
+
+    if (isStepBased) {
+      listenerRef.current = (e) => {
+        const a = e.accelerationIncludingGravity;
+        if (!a) return;
+        
+        const rawMag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
+        gravityRef.current = gravityRef.current * 0.8 + rawMag * 0.2;
+        const linearAcc = Math.abs(rawMag - gravityRef.current);
+        
+        if (linearAcc > 1.5 && !stepCooldownRef.current) {
+          localSteps++;
+          setDisplaySteps(sessionStepsRef.current + localSteps);
+          stepCooldownRef.current = true;
+          setTimeout(() => { stepCooldownRef.current = false; }, 330);
+        }
+      };
+      window.addEventListener('devicemotion', listenerRef.current);
+    }
   }, []);
 
-  const stop = useCallback(() => {
+  const pauseTracking = useCallback(() => {
+    if (listenerRef.current) { window.removeEventListener('devicemotion', listenerRef.current); listenerRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    
+    // Save state
+    setDisplaySteps(s => { sessionStepsRef.current = s; return s; });
+    setDisplaySeconds(s => { sessionTimeRef.current = s; return s; });
+    
+    setIsTracking(false);
+  }, []);
+
+  const resetTracking = useCallback(() => {
     if (listenerRef.current) { window.removeEventListener('devicemotion', listenerRef.current); listenerRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     setIsTracking(false);
+    setHasStartedSession(false);
+    sessionStepsRef.current = 0;
+    sessionTimeRef.current = 0;
+    setDisplaySteps(0);
+    setDisplaySeconds(0);
   }, []);
 
   useEffect(() => () => {
@@ -76,7 +102,7 @@ function usePedometer() {
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
-  return { steps, isTracking, elapsedSeconds, supported, start, stop };
+  return { steps: displaySteps, elapsedSeconds: displaySeconds, isTracking, hasStartedSession, supported, resumeTracking, pauseTracking, resetTracking };
 }
 
 /* ─── MET values for common cardio activities ─────────────────── */
@@ -84,13 +110,6 @@ const CARDIO_ACTIVITIES = [
   { id: 'walking',      label: 'Walking',       icon: '🚶', met: 3.5 },
   { id: 'jogging',      label: 'Jogging',       icon: '🏃', met: 7.0 },
   { id: 'running',      label: 'Running',       icon: '💨', met: 11.0 },
-  { id: 'cycling',      label: 'Cycling',       icon: '🚴', met: 7.5 },
-  { id: 'swimming',     label: 'Swimming',      icon: '🏊', met: 8.0 },
-  { id: 'jump_rope',   label: 'Jump Rope',     icon: '🪢', met: 11.0 },
-  { id: 'hiit',         label: 'HIIT',          icon: '🔥', met: 9.5 },
-  { id: 'elliptical',   label: 'Elliptical',    icon: '⚙️', met: 5.0 },
-  { id: 'stairclimber', label: 'Stair Climber', icon: '🪜', met: 8.0 },
-  { id: 'yoga',         label: 'Yoga',          icon: '🧘', met: 2.5 },
 ];
 
 /**
@@ -173,19 +192,37 @@ const CardioTab = ({ userWeight }) => {
 
   const ped = usePedometer();
   const weight = userWeight || 70;
+  const isStepBased = activity === 'walking' || activity === 'jogging';
+  const act = CARDIO_ACTIVITIES.find(a => a.id === activity) || { label: 'Activity', met: 5 };
 
   const loadLogs = () => fetchCardioLogs().then(data => setCardioLogs(data)).catch(() => {});
   useEffect(() => { loadLogs(); }, []);
 
-  // When tracking stops, auto-fill steps and duration
-  const prevTracking = useRef(false);
-  useEffect(() => {
-    if (prevTracking.current && !ped.isTracking && ped.steps > 0) {
-      setSteps(String(ped.steps));
-      setDuration(String(Math.max(1, Math.round(ped.elapsedSeconds / 60))));
+  const handleSavePedometer = async () => {
+    if (ped.isTracking) ped.pauseTracking();
+    setSaving(true);
+    
+    const mins = Math.max(1, Math.round(ped.elapsedSeconds / 60));
+    const cals = isStepBased 
+        ? estimateStepCalories(ped.steps > 0 ? ped.steps : ped.elapsedSeconds * 1.5, weight) 
+        : estimateCalories(activity, weight, mins);
+        
+    try {
+      await saveCardioLog({
+        date: today,
+        activity: act.label,
+        durationMinutes: mins,
+        caloriesBurned: cals,
+        steps: isStepBased ? ped.steps : 0,
+      });
+      toast.success(`${act.label} recorded! 🔥 ${cals} kcal`, { theme: 'dark' });
+      loadLogs();
+      ped.resetTracking();
+    } catch {
+      toast.error('Failed to save session.', { theme: 'dark' });
     }
-    prevTracking.current = ped.isTracking;
-  }, [ped.isTracking, ped.steps, ped.elapsedSeconds]);
+    setSaving(false);
+  };
 
   const estimatedCal = useMemo(() => {
     if (steps && Number(steps) > 0) return estimateStepCalories(Number(steps), weight);
@@ -193,11 +230,10 @@ const CardioTab = ({ userWeight }) => {
   }, [activity, duration, steps, weight]);
 
   const liveCal = useMemo(() => {
-    if (ped.isTracking && ped.steps > 0) return estimateStepCalories(ped.steps, weight);
-    return 0;
-  }, [ped.steps, ped.isTracking, weight]);
-
-  const act = CARDIO_ACTIVITIES.find(a => a.id === activity);
+    if (!ped.hasStartedSession) return 0;
+    if (isStepBased) return estimateStepCalories(ped.steps, weight);
+    return estimateCalories(activity, weight, Math.max(1, Math.round(ped.elapsedSeconds / 60)));
+  }, [ped.steps, ped.elapsedSeconds, ped.hasStartedSession, weight, isStepBased, activity]);
 
   const handleSave = async () => {
     if (!duration && !steps) {
@@ -230,8 +266,21 @@ const CardioTab = ({ userWeight }) => {
     }, 'Delete', 'bg-red-500');
   };
 
-  const todayLogs = cardioLogs.filter(l => l.date === date);
-  const todayCalBurned = todayLogs.reduce((s, l) => s + l.caloriesBurned, 0);
+  const { todayLogs, todayCalBurned } = useMemo(() => {
+    const map = {};
+    let totalCal = 0;
+    cardioLogs.filter(l => l.date === date).forEach(l => {
+      totalCal += l.caloriesBurned;
+      if (!map[l.activity]) map[l.activity] = { ...l, aggregatedIds: [l._id] };
+      else {
+        map[l.activity].durationMinutes += l.durationMinutes;
+        map[l.activity].caloriesBurned += l.caloriesBurned;
+        map[l.activity].steps += l.steps;
+        map[l.activity].aggregatedIds.push(l._id);
+      }
+    });
+    return { todayLogs: Object.values(map), todayCalBurned: totalCal };
+  }, [cardioLogs, date]);
 
   const chartData = (() => {
     const map = {};
@@ -252,65 +301,75 @@ const CardioTab = ({ userWeight }) => {
         </div>
       )}
 
-      {/* ── REAL-TIME STEP TRACKER ── */}
+      {/* ── REAL-TIME ACTIVITY TRACKER ── */}
       <div className="bg-surface/70 backdrop-blur border border-white/10 rounded-3xl p-6 md:p-8 space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/20 rounded-xl"><Footprints className="w-5 h-5 text-green-400" /></div>
-            <h2 className="text-xl font-bold text-white">Step Tracker</h2>
+            <h2 className="text-xl font-bold text-white">{isStepBased ? 'Step Counter' : 'Activity Timer'} ({act.label})</h2>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${ped.supported === false ? 'bg-zinc-800 text-zinc-500' : ped.isTracking ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800/60 text-zinc-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${ped.isTracking ? 'bg-green-400 animate-pulse' : ped.supported ? 'bg-zinc-500' : 'bg-red-500/50'}`} />
-            {ped.isTracking ? 'LIVE' : ped.supported === false ? 'NOT SUPPORTED' : ped.supported ? 'SENSOR READY' : 'CHECKING…'}
-          </div>
+          {isStepBased && (
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${ped.supported === false ? 'bg-zinc-800 text-zinc-500' : ped.isTracking ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800/60 text-zinc-400'}`}>
+              <span className={`w-2 h-2 rounded-full ${ped.isTracking ? 'bg-green-400 animate-pulse' : ped.supported ? 'bg-zinc-500' : 'bg-red-500/50'}`} />
+              {ped.isTracking ? 'LIVE' : ped.supported === false ? 'NOT SUPPORTED' : ped.supported ? 'SENSOR READY' : 'CHECKING…'}
+            </div>
+          )}
         </div>
 
         {/* Metrics Row */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Steps', value: ped.isTracking ? ped.steps.toLocaleString() : '—', color: 'text-white' },
-            { label: 'kcal Burned', value: ped.isTracking ? liveCal : '—', color: 'text-orange-400' },
-            { label: 'Time', value: ped.isTracking ? fmt(ped.elapsedSeconds) : '—', color: 'text-purple-400' },
-          ].map(m => (
-            <div key={m.label} className="bg-background/50 border border-white/5 rounded-2xl py-4 flex flex-col items-center gap-1">
-              <p className={`text-2xl font-black ${m.color}`}>{m.value}</p>
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{m.label}</p>
+        {(!isStepBased || ped.supported !== false) ? (
+          <>
+            <div className={`grid ${isStepBased ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+              {isStepBased && (
+                <div className="bg-background/50 border border-white/5 rounded-2xl py-4 flex flex-col items-center gap-1">
+                  <p className="text-2xl font-black text-white">{ped.hasStartedSession ? ped.steps.toLocaleString() : '—'}</p>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Steps</p>
+                </div>
+              )}
+              <div className="bg-background/50 border border-white/5 rounded-2xl py-4 flex flex-col items-center gap-1">
+                <p className="text-2xl font-black text-orange-400">{ped.hasStartedSession ? liveCal : '—'}</p>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">kcal Burned</p>
+              </div>
+              <div className="bg-background/50 border border-white/5 rounded-2xl py-4 flex flex-col items-center gap-1">
+                <p className="text-2xl font-black text-purple-400">{ped.hasStartedSession ? fmt(ped.elapsedSeconds) : '—'}</p>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Time</p>
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* Live calorie pulse while tracking */}
-        {ped.isTracking && ped.steps > 0 && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-r from-green-500/20 to-emerald-500/10 border border-green-500/30 rounded-2xl p-4 text-center">
-            <p className="text-xs font-bold text-green-400 uppercase tracking-widest mb-1">🔥 Real-Time Burn</p>
-            <p className="text-4xl font-black text-green-400">{liveCal}</p>
-            <p className="text-sm text-zinc-400 mt-1">kcal · {ped.steps.toLocaleString()} steps · {weight}kg</p>
-          </motion.div>
-        )}
+            {/* Play / Pause / Cancel Buttons */}
+            <div className="flex gap-4 items-center">
+              <button
+                onClick={() => ped.isTracking ? ped.pauseTracking() : ped.resumeTracking(isStepBased)}
+                className={`flex-[1.5] w-full flex items-center justify-center gap-3 py-4 font-extrabold rounded-2xl shadow-lg transition-all active:scale-95 ${ped.isTracking ? 'bg-gradient-to-r from-orange-500 to-amber-600 shadow-orange-500/20 text-white' : 'bg-gradient-to-r from-green-500 to-emerald-500 shadow-green-500/20 text-white'}`}
+              >
+                {ped.isTracking ? <><Square className="w-5 h-5 fill-current" /> Pause Tracking</> : ped.hasStartedSession ? <><Play className="w-5 h-5 fill-current" /> Resume</> : <><Play className="w-5 h-5 fill-current" /> Start Session</>}
+              </button>
 
-        {/* Start / Stop button */}
-        {ped.supported === false ? (
+              {ped.hasStartedSession && (
+                <>
+                  <button
+                    onClick={ped.resetTracking}
+                    className="flex-[0.5] w-full flex items-center justify-center py-4 rounded-2xl transition-all active:scale-95 bg-red-500/10 hover:bg-red-500/20 text-red-500"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+
+                  <button
+                    onClick={handleSavePedometer}
+                    disabled={saving}
+                    className="flex-[1.5] w-full flex items-center justify-center gap-3 py-4 font-extrabold rounded-2xl shadow-lg transition-all active:scale-95 bg-gradient-to-r from-blue-500 to-indigo-600 shadow-blue-500/20 text-white disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> Save</>}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
           <div className="text-center py-4 text-zinc-500 text-sm">
             <p>Motion sensors not available in this browser.</p>
             <p className="mt-1 text-xs">Open on a mobile device for real-time step tracking, or enter steps manually below.</p>
           </div>
-        ) : (
-          <button
-            onClick={ped.isTracking ? ped.stop : ped.start}
-            className={`w-full flex items-center justify-center gap-3 py-4 font-extrabold rounded-2xl shadow-lg transition-all active:scale-95 ${ped.isTracking ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:opacity-90 shadow-red-500/20 text-white' : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:opacity-90 shadow-green-500/20 text-white'}`}
-          >
-            {ped.isTracking ? <><Square className="w-5 h-5" /> Stop & Save Steps</> : <><Play className="w-5 h-5" /> Start Step Tracking</>}
-          </button>
-        )}
-
-        {/* Captured confirmation */}
-        {!ped.isTracking && steps !== '' && (
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3">
-            <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
-            <p className="text-green-400 text-sm font-bold">{Number(steps).toLocaleString()} steps captured — ready to log below ↓</p>
-          </motion.div>
         )}
       </div>
 
@@ -572,7 +631,15 @@ const Workouts = () => {
   const { user, updateUserProfile } = useAuth();
   const splitsOrigin = user?.splitConfig || [];
 
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('Strength');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'Cardio') {
+      setActiveTab('Cardio');
+    }
+  }, [location.search]);
 
   // Strength state
   const [workouts, setWorkouts]         = useState([]);
