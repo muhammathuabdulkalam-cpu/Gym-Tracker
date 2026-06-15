@@ -29,6 +29,13 @@ exports.searchNutrition = async (req, res) => {
     }
   }
 
+  geminiKey = geminiKey ? geminiKey.trim() : '';
+  ninjaKey = ninjaKey ? ninjaKey.trim() : '';
+
+  if (geminiKey) {
+    console.log(`[AI Search] Using Gemini Key: ${geminiKey.substring(0, 6)}...${geminiKey.substring(geminiKey.length - 4)}`);
+  }
+
   // 2. Try Google Gemini API (Free tier AI Agent)
   if (geminiKey) {
     try {
@@ -53,7 +60,7 @@ Output:
 ]`;
 
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
         {
           contents: [{ parts: [{ text: prompt }] }]
         },
