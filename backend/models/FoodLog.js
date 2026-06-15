@@ -5,6 +5,8 @@ const foodEntrySchema = new mongoose.Schema({
   calories: { type: Number, default: 0 },
   protein: { type: Number, default: 0  },
   carbs: { type: Number, default: 0 },
+  quantity: { type: Number, default: 1 },
+  unit: { type: String, default: 'Grams' },
 });
 
 const foodLogSchema = new mongoose.Schema({

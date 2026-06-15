@@ -32,7 +32,9 @@ exports.saveFoodLog = async (req, res) => {
         name: foodName,
         calories: Number(calories) || 0,
         protein: Number(protein) || 0,
-        carbs: Number(carbs) || 0
+        carbs: Number(carbs) || 0,
+        quantity: Number(req.body.quantity) || 1,
+        unit: req.body.unit || 'Grams'
       };
 
       if (!log) {
@@ -52,6 +54,8 @@ exports.saveFoodLog = async (req, res) => {
             item.calories = newFoodItem.calories;
             item.protein = newFoodItem.protein;
             item.carbs = newFoodItem.carbs;
+            item.quantity = newFoodItem.quantity;
+            item.unit = newFoodItem.unit;
           } else {
             log.foods.push(newFoodItem);
           }

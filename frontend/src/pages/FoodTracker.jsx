@@ -14,6 +14,85 @@ const MEALS = [
   { id: 'snack', label: 'Snacks', icon: '🍎' }
 ];
 
+const STANDARD_UNIT_GRAMS = {
+  Grams: 1,
+  ml: 1,
+  Piece: 100,
+  Slice: 30,
+  Scoop: 30,
+  Cup: 240,
+  Bowl: 350,
+  Tbsp: 15,
+  Tsp: 5,
+  Oz: 28.35,
+  Lb: 453.6,
+};
+
+const normalizeFood = (food) => {
+  if (!food) return null;
+  const unitValue = Number(food.unitValue) || 100;
+  let defaultUnit = String(food.defaultUnit || 'Grams').trim();
+  const lowerUnit = defaultUnit.toLowerCase();
+  if (['gram', 'grams', 'g'].includes(lowerUnit)) defaultUnit = 'Grams';
+  if (['ml', 'mls', 'milliliter', 'milliliters'].includes(lowerUnit)) defaultUnit = 'ml';
+  if (['piece', 'pieces', 'pcs'].includes(lowerUnit)) defaultUnit = 'Piece';
+  if (['slice', 'slices'].includes(lowerUnit)) defaultUnit = 'Slice';
+  if (['scoop', 'scoops'].includes(lowerUnit)) defaultUnit = 'Scoop';
+  if (['cup', 'cups'].includes(lowerUnit)) defaultUnit = 'Cup';
+  if (['bowl', 'bowls'].includes(lowerUnit)) defaultUnit = 'Bowl';
+  if (['tbsp', 'tablespoon', 'tablespoons'].includes(lowerUnit)) defaultUnit = 'Tbsp';
+  if (['tsp', 'teaspoon', 'teaspoons'].includes(lowerUnit)) defaultUnit = 'Tsp';
+  if (['oz', 'ounces', 'ounce'].includes(lowerUnit)) defaultUnit = 'Oz';
+  if (['lb', 'pounds', 'pound', 'lbs'].includes(lowerUnit)) defaultUnit = 'Lb';
+
+  const units = {};
+
+  if (food.units) {
+    Object.entries(food.units).forEach(([uName, val]) => {
+      let cleanUName = uName;
+      const lowerUName = uName.toLowerCase();
+      if (['gram', 'grams', 'g'].includes(lowerUName)) cleanUName = 'Grams';
+      if (['ml', 'mls', 'milliliter', 'milliliters'].includes(lowerUName)) cleanUName = 'ml';
+      units[cleanUName] = val;
+    });
+  } else {
+    const standardWeight = STANDARD_UNIT_GRAMS[defaultUnit] || 100;
+    if (!['Grams', 'ml'].includes(defaultUnit)) {
+      units[defaultUnit] = unitValue > 10 ? unitValue : standardWeight;
+    }
+  }
+
+  if (units['Grams'] === undefined) units['Grams'] = 1;
+  if (units['ml'] === undefined) units['ml'] = 1;
+
+  Object.entries(STANDARD_UNIT_GRAMS).forEach(([uName, standardVal]) => {
+    if (units[uName] === undefined) {
+      units[uName] = standardVal;
+    }
+  });
+
+  let baseServingGrams = 100;
+  if (defaultUnit === 'Grams' || defaultUnit === 'ml') {
+    baseServingGrams = unitValue;
+  } else {
+    const singleUnitWeight = units[defaultUnit] || 100;
+    baseServingGrams = unitValue > 10 ? unitValue : (unitValue * singleUnitWeight);
+  }
+
+  return {
+    ...food,
+    name: food.name || 'Custom Food',
+    cal: Number(food.calories ?? food.cal ?? 0),
+    p: Number(food.protein ?? food.p ?? 0),
+    c: Number(food.carbs ?? food.c ?? 0),
+    defaultUnit,
+    unitValue,
+    base: defaultUnit === 'Grams' ? `${unitValue}g` : `1 ${defaultUnit}`,
+    units,
+    baseServingGrams
+  };
+};
+
 // Scrollable Picker Component
 const ScrollPicker = ({ items, value, onChange, label }) => {
   const scrollRef = useRef(null);
@@ -95,29 +174,7 @@ const SmartFoodAdder = ({ onAdd }) => {
   const [cUnit, setCUnit] = useState('Grams');
   const [cUnitValue, setCUnitValue] = useState(100);
 
-  const normalizeFood = (food) => {
-    const unitValue = Number(food.unitValue) || 100;
-    let defaultUnit = String(food.defaultUnit || 'Grams').trim();
-    if (['gram', 'grams'].includes(defaultUnit.toLowerCase())) defaultUnit = 'Grams';
 
-    const normalizedUnits = food.units
-      ? { ...food.units }
-      : (defaultUnit === 'Grams'
-        ? { Grams: 1 }
-        : { [defaultUnit]: unitValue, Grams: 1 });
-
-    return {
-      ...food,
-      name: food.name || 'Custom Food',
-      cal: Number(food.calories ?? food.cal ?? 0),
-      p: Number(food.protein ?? food.p ?? 0),
-      c: Number(food.carbs ?? food.c ?? 0),
-      defaultUnit,
-      unitValue,
-      base: defaultUnit === 'Grams' ? `${unitValue}g` : `1 ${defaultUnit}`,
-      units: normalizedUnits
-    };
-  };
 
   useEffect(() => {
     const loadCustomFoods = async () => {
@@ -183,16 +240,16 @@ const SmartFoodAdder = ({ onAdd }) => {
   const handleAddSmart = () => {
     if (!selectedFood || !unit || quantity <= 0) return;
     const grams = quantity * (selectedFood.units[unit] ?? 0);
-    const factor = grams / 100;
+    const ratio = grams / (selectedFood.baseServingGrams || 100);
     const caloriesBase = selectedFood.cal ?? selectedFood.calories ?? 0;
     const proteinBase = selectedFood.p ?? selectedFood.protein ?? 0;
     const carbsBase = selectedFood.c ?? selectedFood.carbs ?? 0;
-    const displayName = `${quantity} ${unit}`;
+    const displayName = selectedFood.name;
     onAdd({
       name: displayName,
-      calories: Math.round(caloriesBase * factor),
-      protein: Number((proteinBase * factor).toFixed(1)),
-      carbs: Number((carbsBase * factor).toFixed(1)),
+      calories: Math.round(caloriesBase * ratio),
+      protein: Number((proteinBase * ratio).toFixed(1)),
+      carbs: Number((carbsBase * ratio).toFixed(1)),
       quantity,
       unit,
       base: selectedFood.base
@@ -329,14 +386,14 @@ const SmartFoodAdder = ({ onAdd }) => {
 
   if (selectedFood) {
     const grams = quantity * (selectedFood.units[unit] ?? 0);
-    const factor = grams / 100;
+    const ratio = grams / (selectedFood.baseServingGrams || 100);
     const foodName = selectedFood.name || selectedFood?.label || 'Custom Food';
     const baseCalories = selectedFood.cal ?? selectedFood.calories ?? 0;
     const baseProtein = selectedFood.p ?? selectedFood.protein ?? 0;
     const baseCarbs = selectedFood.c ?? selectedFood.carbs ?? 0;
-    const currentCal = Math.round(baseCalories * factor);
-    const currentP = (baseProtein * factor).toFixed(1);
-    const currentC = (baseCarbs * factor).toFixed(1);
+    const currentCal = Math.round(baseCalories * ratio);
+    const currentP = (baseProtein * ratio).toFixed(1);
+    const currentC = (baseCarbs * ratio).toFixed(1);
     const baseLabel = selectedFood.base || `${selectedFood.unitValue || 100} ${selectedFood.defaultUnit || 'Grams'}`;
 
     return (
@@ -367,7 +424,7 @@ const SmartFoodAdder = ({ onAdd }) => {
         <div>
           <label className="text-xs text-zinc-400 uppercase tracking-wider">Full Name (Auto-filled)</label>
           <div className="w-full bg-surface/80 border border-white/10 p-3 rounded-xl text-white text-sm">
-            {quantity} {unit}
+            {quantity} {unit} {foodName}
           </div>
         </div>
 
@@ -505,30 +562,7 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
     loadCustomFoods();
   }, []);
 
-  // Normalize food helper
-  const normalizeFood = (food) => {
-    const unitValue = Number(food.unitValue) || 100;
-    let defaultUnit = String(food.defaultUnit || 'Grams').trim();
-    if (['gram', 'grams'].includes(defaultUnit.toLowerCase())) defaultUnit = 'Grams';
 
-    const normalizedUnits = food.units
-      ? { ...food.units }
-      : (defaultUnit === 'Grams'
-        ? { Grams: 1 }
-        : { [defaultUnit]: unitValue, Grams: 1 });
-
-    return {
-      ...food,
-      name: food.name || 'Custom Food',
-      cal: Number(food.calories ?? food.cal ?? 0),
-      p: Number(food.protein ?? food.p ?? 0),
-      c: Number(food.carbs ?? food.c ?? 0),
-      defaultUnit,
-      unitValue,
-      base: defaultUnit === 'Grams' ? `${unitValue}g` : `1 ${defaultUnit}`,
-      units: normalizedUnits
-    };
-  };
 
   useEffect(() => {
     const allFoods = [...customFoods, ...FOOD_DATABASE.map(normalizeFood)];
@@ -669,12 +703,9 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                               const perUnitCal = editValues.perUnit?.calories || 0;
                               const perUnitPr = editValues.perUnit?.protein || 0;
                               const perUnitCb = editValues.perUnit?.carbs || 0;
-                              const unitVal = editValues.unit || '';
-                              const autoName = `${newQty} ${unitVal}`;
                               setEditValues({
                                 ...editValues,
                                 quantity: String(newQty),
-                                name: autoName,
                                 calories: String(Math.round(perUnitCal * newQty)),
                                 protein: String((perUnitPr * newQty).toFixed(1)),
                                 carbs: String((perUnitCb * newQty).toFixed(1)),
@@ -687,11 +718,30 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                             value={editValues.unit} 
                             onChange={(newUnit) => {
                               const qty = Number(editValues.quantity) || 1;
-                              const autoName = qty > 0 && newUnit ? `${qty} ${newUnit}` : editValues.name;
+                              const foundFood = allAvailableFoods.find(food => food.name.toLowerCase() === editValues.name.toLowerCase());
+                              let newPerUnitCal = 0, newPerUnitPro = 0, newPerUnitCarb = 0;
+                              if (foundFood) {
+                                const newUnitWeight = foundFood.units[newUnit] || 1;
+                                const ratio = newUnitWeight / (foundFood.baseServingGrams || 100);
+                                newPerUnitCal = foundFood.cal * ratio;
+                                newPerUnitPro = foundFood.p * ratio;
+                                newPerUnitCarb = foundFood.c * ratio;
+                              } else {
+                                newPerUnitCal = editValues.perUnit?.calories || 0;
+                                newPerUnitPro = editValues.perUnit?.protein || 0;
+                                newPerUnitCarb = editValues.perUnit?.carbs || 0;
+                              }
                               setEditValues({
                                 ...editValues,
                                 unit: newUnit,
-                                name: autoName,
+                                perUnit: {
+                                  calories: newPerUnitCal,
+                                  protein: newPerUnitPro,
+                                  carbs: newPerUnitCarb
+                                },
+                                calories: String(Math.round(newPerUnitCal * qty)),
+                                protein: String((newPerUnitPro * qty).toFixed(1)),
+                                carbs: String((newPerUnitCarb * qty).toFixed(1))
                               });
                             }} 
                             label="Unit" 
@@ -699,7 +749,9 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                         </div>
                         <div>
                           <label className="text-xs text-zinc-400 uppercase tracking-wider">Full Name (Auto-filled)</label>
-                          <input value={editValues.name} onChange={(e) => setEditValues({ ...editValues, name: e.target.value })} className="w-full bg-surface/80 border border-white/10 p-3 rounded-xl text-white text-sm outline-none" placeholder="Auto-updates with Quantity + Unit" />
+                          <div className="w-full bg-surface/80 border border-white/10 p-3 rounded-xl text-white text-sm">
+                            {editValues.quantity} {editValues.unit} {editValues.name}
+                          </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
@@ -725,16 +777,13 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                           <button onClick={async () => {
                             const updated = [...foods];
                             const quantityVal = Number(editValues.quantity) || Number(updated[i].quantity) || 1;
-                            const unitVal = (editValues.unit || updated[i].unit || updated[i].name || '').trim();
-                            const cleanUnit = unitVal.replace(/^\s*\d+(?:\.\d+)?\s*/, '').trim();
-                            const nameVal = editValues.name?.trim()
-                              ? editValues.name.trim()
-                              : `${quantityVal} ${cleanUnit}`.trim();
+                            const unitVal = editValues.unit || updated[i].unit || 'Grams';
+                            const nameVal = editValues.name || updated[i].name || 'Custom Food';
                             updated[i] = {
                               ...updated[i],
                               name: nameVal,
                               quantity: quantityVal,
-                              unit: cleanUnit || updated[i].unit,
+                              unit: unitVal,
                               calories: Number(editValues.calories) || Number(updated[i].calories) || 0,
                               protein: Number(editValues.protein) || Number(updated[i].protein) || 0,
                               carbs: Number(editValues.carbs) || Number(updated[i].carbs) || 0,
@@ -748,7 +797,9 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                     ) : (
                       <div className="flex justify-between items-center pl-4 pr-2 py-2 rounded-xl">
                         <div className="flex-1">
-                          <p className="text-sm font-bold text-zinc-200">{f.name}</p>
+                          <p className="text-sm font-bold text-zinc-200">
+                            {f.name} <span className="text-xs text-zinc-400 font-normal">({f.quantity || 1} {f.unit || 'Grams'})</span>
+                          </p>
                           <p className="text-[10px] text-zinc-500 font-bold tracking-widest uppercase mt-0.5">
                             <span className="text-orange-400">{f.calories} kcal</span>
                             <span className="mx-2">•</span> 
@@ -759,8 +810,9 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                         </div>
                         <div className="flex items-center gap-1">
                           <button onClick={() => {
-                            const { quantity: parsedQty, unit: parsedUnit } = parseNameForEdit(f.name);
-                            const foundFood = findFoodByUnit(parsedUnit);
+                            const parsedQty = f.quantity || 1;
+                            const parsedUnit = f.unit || 'Grams';
+                            const foundFood = allAvailableFoods.find(food => food.name.toLowerCase() === f.name.toLowerCase());
                             const cal = Number(f.calories) || 0;
                             const prot = Number(f.protein) || 0;
                             const crb = Number(f.carbs) || 0;
@@ -769,13 +821,13 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                             let availableUnits = [];
                             
                             if (foundFood) {
-                              // Use database per-unit values
-                              perUnitCal = foundFood.cal || 0;
-                              perUnitPro = foundFood.p || 0;
-                              perUnitCarb = foundFood.c || 0;
-                              availableUnits = foundFood.units ? Object.keys(foundFood.units) : [parsedUnit];
+                              availableUnits = Object.keys(foundFood.units);
+                              const currentUnitWeight = foundFood.units[parsedUnit] || 1;
+                              const ratio = currentUnitWeight / (foundFood.baseServingGrams || 100);
+                              perUnitCal = foundFood.cal * ratio;
+                              perUnitPro = foundFood.p * ratio;
+                              perUnitCarb = foundFood.c * ratio;
                             } else {
-                              // Fallback: calculate from current stored values
                               perUnitCal = parsedQty > 0 ? cal / parsedQty : 0;
                               perUnitPro = parsedQty > 0 ? prot / parsedQty : 0;
                               perUnitCarb = parsedQty > 0 ? crb / parsedQty : 0;
@@ -787,14 +839,14 @@ const MealSection = ({ meal, date, onRefresh, allLogs }) => {
                               name: f.name,
                               quantity: String(parsedQty),
                               unit: parsedUnit,
-                              calories: String(Math.round(perUnitCal * parsedQty)),
-                              protein: String((perUnitPro * parsedQty).toFixed(1)),
-                              carbs: String((perUnitCarb * parsedQty).toFixed(1)),
+                              calories: String(cal),
+                              protein: String(prot),
+                              carbs: String(crb),
                               original: {
                                 quantity: parsedQty,
-                                calories: Math.round(perUnitCal * parsedQty),
-                                protein: perUnitPro * parsedQty,
-                                carbs: perUnitCarb * parsedQty,
+                                calories: cal,
+                                protein: prot,
+                                carbs: crb,
                               },
                               perUnit: {
                                 calories: perUnitCal,
