@@ -38,8 +38,8 @@ exports.searchNutrition = async (req, res) => {
 
   // 2. Try Google Gemini API (Free tier AI Agent)
   if (geminiKey) {
-    try {
-      const prompt = `You are a nutrition database. Analyze this query: "${query.trim()}".
+    let modelName = 'gemini-1.5-flash';
+    const prompt = `You are a nutrition database. Analyze this query: "${query.trim()}".
 Suggest a list of matching food items. For each food item, estimate the nutritional values.
 Provide ONLY a valid JSON array of objects. Do not include markdown code block markers (like \`\`\`json), do not include any text, greetings, explanations, or backticks. Return the raw JSON array string exactly.
 
@@ -59,13 +59,48 @@ Output:
   {"name": "Egg White (boiled)", "calories": 52, "protein": 11, "carbs": 0.7, "fat": 0.2, "defaultUnit": "Piece", "unitValue": 1}
 ]`;
 
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }]
-        },
+    const callGemini = async (model) => {
+      return await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        { contents: [{ parts: [{ text: prompt }] }] },
         { timeout: 8000 }
       );
+    };
+
+    try {
+      let response;
+      try {
+        response = await callGemini(modelName);
+      } catch (firstErr) {
+        const isModelErr = firstErr.response?.status === 404 || 
+                           firstErr.message?.includes('not found') || 
+                           firstErr.response?.data?.error?.message?.toLowerCase().includes('not found') ||
+                           firstErr.response?.data?.error?.message?.toLowerCase().includes('not supported');
+
+        if (isModelErr) {
+          console.log('[AI Search] Default model failed. Discovering supported models dynamically...');
+          const listResponse = await axios.get(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
+            { timeout: 8000 }
+          );
+
+          const availableModels = listResponse.data?.models || [];
+          const candidate = availableModels.find(m => 
+            m.supportedGenerationMethods?.includes('generateContent') && 
+            (m.name?.includes('flash') || m.name?.includes('pro') || m.name?.includes('gemini'))
+          );
+
+          if (candidate) {
+            modelName = candidate.name.replace('models/', '');
+            console.log(`[AI Search] Discovered and resolved fallback model: ${modelName}`);
+            response = await callGemini(modelName);
+          } else {
+            throw firstErr;
+          }
+        } else {
+          throw firstErr;
+        }
+      }
 
       let textResult = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       textResult = textResult.trim();
