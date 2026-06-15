@@ -23,6 +23,7 @@ exports.registerUser = async (req, res) => {
       weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
       splitConfig: user.splitConfig, profileImage: user.profileImage,
       goalWeight: user.goalWeight, goalType: user.goalType,
+      geminiApiKey: user.geminiApiKey, ninjaApiKey: user.ninjaApiKey,
       token: generateToken(user._id)
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
@@ -40,6 +41,7 @@ exports.loginUser = async (req, res) => {
         weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
         splitConfig: user.splitConfig, profileImage: user.profileImage,
         goalWeight: user.goalWeight, goalType: user.goalType,
+        geminiApiKey: user.geminiApiKey, ninjaApiKey: user.ninjaApiKey,
         token: generateToken(user._id)
       });
     } else {
@@ -70,6 +72,7 @@ exports.googleLogin = async (req, res) => {
       weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
       splitConfig: user.splitConfig, profileImage: user.profileImage,
       goalWeight: user.goalWeight, goalType: user.goalType,
+      geminiApiKey: user.geminiApiKey, ninjaApiKey: user.ninjaApiKey,
       token: generateToken(user._id)
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
@@ -84,7 +87,8 @@ exports.getProfile = async (req, res) => {
       _id: user._id, email: user.email, name: user.name, age: user.age,
       weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
       splitConfig: user.splitConfig, profileImage: user.profileImage,
-      goalWeight: user.goalWeight, goalType: user.goalType
+      goalWeight: user.goalWeight, goalType: user.goalType,
+      geminiApiKey: user.geminiApiKey, ninjaApiKey: user.ninjaApiKey
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
@@ -105,13 +109,16 @@ exports.updateProfile = async (req, res) => {
     if (req.body.profileImage !== undefined) user.profileImage = req.body.profileImage;
     if (req.body.goalWeight !== undefined) user.goalWeight = req.body.goalWeight;
     if (req.body.goalType !== undefined) user.goalType = req.body.goalType;
+    if (req.body.geminiApiKey !== undefined) user.geminiApiKey = req.body.geminiApiKey;
+    if (req.body.ninjaApiKey !== undefined) user.ninjaApiKey = req.body.ninjaApiKey;
     await user.save();
 
     res.json({
       _id: user._id, email: user.email, name: user.name, age: user.age,
       weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
       splitConfig: user.splitConfig, profileImage: user.profileImage,
-      goalWeight: user.goalWeight, goalType: user.goalType
+      goalWeight: user.goalWeight, goalType: user.goalType,
+      geminiApiKey: user.geminiApiKey, ninjaApiKey: user.ninjaApiKey
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };

@@ -16,7 +16,9 @@ const userSchema = new mongoose.Schema({
   },
   profileImage: { type: String, default: '' },
   goalWeight: { type: Number, default: null },
-  goalType: { type: String, enum: ['loss', 'gain'], default: 'loss' }
+  goalType: { type: String, enum: ['loss', 'gain'], default: 'loss' },
+  geminiApiKey: { type: String, default: '' },
+  ninjaApiKey: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

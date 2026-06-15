@@ -9,6 +9,7 @@ const foodRoutes = require('./routes/foodRoutes');
 const weightRoutes = require('./routes/weightRoutes');
 const cardioRoutes = require('./routes/cardioRoutes');
 const customFoodRoutes = require('./routes/customFoodRoutes');
+const nutritionRoutes = require('./routes/nutritionRoutes');
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ app.use('/api/food', foodRoutes);
 app.use('/api/custom-food', customFoodRoutes);
 app.use('/api/weight', weightRoutes);
 app.use('/api/cardio', cardioRoutes);
+app.use('/api/nutrition', nutritionRoutes);
 
 app.get('/', (req, res) => res.send('Fitness API Server is running ✅'));
 app.get('/api/health', (req, res) => {

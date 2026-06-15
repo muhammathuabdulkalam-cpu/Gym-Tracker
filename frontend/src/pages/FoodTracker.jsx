@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchFoodLogs, saveFoodLog, deleteFoodLog, fetchCustomFoods, saveCustomFood } from '../api';
+import { fetchFoodLogs, saveFoodLog, deleteFoodLog, fetchCustomFoods, saveCustomFood, fetchNutrition } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { UtensilsCrossed, Save, Plus, Trash2, Edit3, Calendar, Loader2, Info } from 'lucide-react';
+import { UtensilsCrossed, Save, Plus, Trash2, Edit3, Calendar, Loader2, Info, Sparkles } from 'lucide-react';
 import { FOOD_DATABASE } from '../constants/foodDatabase';
 import { toast } from 'react-toastify';
 import { confirmAction } from '../utils/toastConfirm';
@@ -81,6 +81,11 @@ const SmartFoodAdder = ({ onAdd }) => {
   const [customMode, setCustomMode] = useState(false);
   const [customFoods, setCustomFoods] = useState([]);
   const [loadingCustoms, setLoadingCustoms] = useState(true);
+
+  // AI Lookup states
+  const [searchingAI, setSearchingAI] = useState(false);
+  const [aiResults, setAiResults] = useState([]);
+  const [aiMessage, setAiMessage] = useState('');
   
   // Custom states
   const [cName, setCName] = useState('');
@@ -137,6 +142,31 @@ const SmartFoodAdder = ({ onAdd }) => {
         return [...customMatches, ...dbMatches].slice(0, 8);
       })()
     : [];
+
+  const handleAISearch = async () => {
+    if (!term || !term.trim()) return;
+    setSearchingAI(true);
+    setAiResults([]);
+    setAiMessage('');
+    try {
+      const data = await fetchNutrition(term.trim());
+      if (data.needs_key) {
+        setAiMessage(data.message || 'Configure your free Gemini API key in Settings.');
+      } else if (Array.isArray(data)) {
+        if (data.length === 0) {
+          setAiMessage('No suggestions returned from AI agent.');
+        } else {
+          setAiResults(data.map(normalizeFood));
+        }
+      } else {
+        setAiMessage('Invalid response from AI agent.');
+      }
+    } catch (err) {
+      setAiMessage(err.response?.data?.message || 'AI Lookup failed. Check your API key.');
+    } finally {
+      setSearchingAI(false);
+    }
+  };
 
   const handleSelect = (f) => {
     const normalized = normalizeFood(f);
@@ -358,15 +388,74 @@ const SmartFoodAdder = ({ onAdd }) => {
     );
   }
 
+  const showSuggestions = matches.length > 0 || aiResults.length > 0 || !!aiMessage || searchingAI;
+
   return (
     <div className="relative">
-      <input type="text" placeholder="Search food (e.g. Rice, Chicken, Dal)..." value={term} onChange={e => setTerm(e.target.value)}
-        className="w-full bg-surface border border-white/10 p-4 rounded-2xl text-white outline-none focus:ring-1 focus:ring-accent/50 placeholder-zinc-500" />
-      
-      {matches.length > 0 && (
-        <div className="absolute top-full mt-2 w-full bg-[#181825] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-20">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          placeholder="Search food or ask AI (e.g. 2 eggs and a banana)..."
+          value={term}
+          onChange={e => {
+            setTerm(e.target.value);
+            if (aiResults.length > 0) setAiResults([]);
+            if (aiMessage) setAiMessage('');
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleAISearch();
+            }
+          }}
+          className="w-full bg-surface border border-white/10 p-4 pr-32 rounded-2xl text-white outline-none focus:ring-1 focus:ring-accent/50 placeholder-zinc-500"
+        />
+        <button
+          onClick={handleAISearch}
+          disabled={searchingAI || !term.trim()}
+          className="absolute right-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-accent text-white font-bold text-xs rounded-xl hover:opacity-90 active:scale-95 disabled:opacity-50 flex items-center gap-1.5 transition-all"
+        >
+          {searchingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-200" />}
+          Ask AI
+        </button>
+      </div>
+
+      {showSuggestions && (
+        <div className="absolute top-full mt-2 w-full bg-[#181825] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-20 max-h-72 overflow-y-auto scrollbar-thin">
+          {searchingAI && (
+            <div className="p-4 text-center text-sm text-zinc-400 flex items-center justify-center gap-2 border-b border-white/5">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" /> Searching AI Agent...
+            </div>
+          )}
+
+          {aiMessage && (
+            <div className="p-4 text-center text-xs text-orange-400 font-semibold border-b border-white/5">
+              ⚠️ {aiMessage}
+            </div>
+          )}
+
+          {aiResults.map((f, i) => (
+            <button
+              key={`ai-${i}`}
+              onClick={() => handleSelect(f)}
+              className="w-full text-left px-5 py-3 hover:bg-white/5 text-sm text-zinc-200 font-medium border-b border-white/5 last:border-0 transition-colors flex justify-between items-center bg-violet-950/10"
+            >
+              <div className="flex items-center gap-2">
+                <span className="px-1.5 py-0.5 bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[9px] font-black uppercase rounded tracking-wider">AI</span>
+                <span>{f.name}</span>
+              </div>
+              <span className="text-xs text-zinc-500">
+                {f.defaultUnit === 'Grams' && f.unitValue === 100 ? `${f.cal} kcal/100g` : `${f.cal} kcal/${f.base}`}
+              </span>
+            </button>
+          ))}
+
           {matches.map((f, i) => (
-            <button key={i} onClick={() => handleSelect(f)} className="w-full text-left px-5 py-3 hover:bg-white/5 text-sm text-zinc-200 font-medium border-b border-white/5 last:border-0 transition-colors flex justify-between items-center">
+            <button
+              key={`local-${i}`}
+              onClick={() => handleSelect(f)}
+              className="w-full text-left px-5 py-3 hover:bg-white/5 text-sm text-zinc-200 font-medium border-b border-white/5 last:border-0 transition-colors flex justify-between items-center"
+            >
               <span>{f.name}</span>
               <span className="text-xs text-zinc-500">
                 {f.defaultUnit === 'Grams' && f.unitValue === 100 ? `${f.cal} kcal/100g` : `${f.cal} kcal/${f.base}`}
@@ -376,13 +465,16 @@ const SmartFoodAdder = ({ onAdd }) => {
         </div>
       )}
 
-      {term && matches.length === 0 && (
-         <div className="absolute top-full mt-2 w-full bg-[#181825] border border-white/10 rounded-2xl p-4 shadow-2xl z-20 text-center">
-           <p className="text-zinc-400 text-sm mb-3">No matching foods found in database.</p>
-           <button onClick={() => setCustomMode(true)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-primary text-xs font-bold transition-colors">Log Custom Food Manually</button>
-         </div>
+      {term && matches.length === 0 && aiResults.length === 0 && !searchingAI && !aiMessage && (
+        <div className="absolute top-full mt-2 w-full bg-[#181825] border border-white/10 rounded-2xl p-4 shadow-2xl z-20 text-center">
+          <p className="text-zinc-400 text-sm mb-3">No matching foods found in database.</p>
+          <div className="flex gap-2 justify-center">
+            <button onClick={handleAISearch} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-white text-xs font-bold transition-colors">Search with AI</button>
+            <button onClick={() => setCustomMode(true)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-primary text-xs font-bold transition-colors">Log Custom Food Manually</button>
+          </div>
+        </div>
       )}
-      
+
       {!term && (
         <button onClick={() => setCustomMode(true)} className="w-full mt-3 py-3 border border-dashed border-white/10 rounded-xl text-zinc-500 text-xs font-bold hover:text-white transition-colors">
           Or log a custom food manually

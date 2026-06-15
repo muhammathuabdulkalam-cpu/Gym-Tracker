@@ -47,3 +47,6 @@ export const deleteWeightLog = async (id) => (await api.delete(`/weight/${id}`))
 export const fetchCardioLogs = async (date) => (await api.get('/cardio', { params: date ? { date } : {} })).data;
 export const saveCardioLog = async (data) => (await api.post('/cardio', data)).data;
 export const deleteCardioLog = async (id) => (await api.delete(`/cardio/${id}`)).data;
+
+// AI Nutrition lookup endpoints
+export const fetchNutrition = async (query) => (await api.get('/nutrition', { params: { query } })).data;

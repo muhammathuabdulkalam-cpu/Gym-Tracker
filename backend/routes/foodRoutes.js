@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { getFoodLogs, saveFoodLog, deleteFoodLog } = require('../controllers/foodController');
+const { getFoodLogs, saveFoodLog, deleteFoodLog, deleteFoodItem } = require('../controllers/foodController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.use(protect);
 router.get('/', getFoodLogs);
 router.post('/', saveFoodLog);
+router.delete('/item/:date/:mealType/:foodId', deleteFoodItem);
 router.delete('/:id', deleteFoodLog);
 
 module.exports = router;

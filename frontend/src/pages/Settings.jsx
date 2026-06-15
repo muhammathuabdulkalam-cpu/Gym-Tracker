@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile, fetchWeightLogs, saveWeightLog } from '../api';
-import { User, Save, Loader2, Settings2, Scale, Calendar, Mail, Ruler, Activity, TrendingUp, ExternalLink } from 'lucide-react';
+import { User, Save, Loader2, Settings2, Scale, Calendar, Mail, Ruler, Activity, TrendingUp, ExternalLink, BrainCircuit, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 
@@ -31,6 +31,8 @@ const Settings = () => {
   const [saving, setSaving]       = useState(false);
   const [profileImage, setProfileImage] = useState(user?.profileImage || '');
   const [latestWeightLog, setLatestWeightLog] = useState(null);
+  const [geminiApiKey, setGeminiApiKey] = useState(user?.geminiApiKey || '');
+  const [ninjaApiKey, setNinjaApiKey] = useState(user?.ninjaApiKey || '');
 
   // Auto-calculate age from DOB
   const calcAgeFromDob = (dobStr) => {
@@ -53,6 +55,8 @@ const Settings = () => {
     setHeight(user?.height || '');
     setGender(user?.gender || 'male');
     setProfileImage(user?.profileImage || '');
+    setGeminiApiKey(user?.geminiApiKey || '');
+    setNinjaApiKey(user?.ninjaApiKey || '');
   }, [user]);
 
   // Always fetch freshest weight log from DB
@@ -86,9 +90,11 @@ const Settings = () => {
         height: height ? Number(height) : undefined,
         gender,
         dob,
-        profileImage
+        profileImage,
+        geminiApiKey,
+        ninjaApiKey
       });
-      updateUserProfile({ ...updated, dob, age: ageToSave });
+      updateUserProfile({ ...updated, dob, age: ageToSave, geminiApiKey, ninjaApiKey });
 
       // If weight changed, also create a WeightLog entry for today
       if (weight && Number(weight) > 0) {
@@ -255,6 +261,40 @@ const Settings = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* AI Integrations Card */}
+      <div className="bg-surface/70 backdrop-blur border border-white/10 rounded-3xl p-6 md:p-8 space-y-5">
+        <h2 className="text-base font-bold text-white flex items-center gap-2">
+          <BrainCircuit className="w-5 h-5 text-violet-400" /> AI Integrations
+        </h2>
+        <p className="text-zinc-400 text-xs">
+          To search food using AI, retrieve a free API Key from Google AI Studio and paste it below. Alternatively, configure your CalorieNinjas API Key.
+        </p>
+
+        <Field
+          label="Google Gemini API Key (Recommended)"
+          icon={Key}
+          type="password"
+          value={geminiApiKey}
+          onChange={e => setGeminiApiKey(e.target.value)}
+          placeholder="AI Studio API Key"
+        />
+        <div className="text-[11px] text-zinc-500 -mt-3">
+          Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 inline-flex">Google AI Studio <ExternalLink className="w-2.5 h-2.5" /></a>
+        </div>
+
+        <Field
+          label="CalorieNinjas API Key (Optional Fallback)"
+          icon={Key}
+          type="password"
+          value={ninjaApiKey}
+          onChange={e => setNinjaApiKey(e.target.value)}
+          placeholder="CalorieNinjas X-Api-Key"
+        />
+        <div className="text-[11px] text-zinc-500 -mt-3">
+          Get a free key at <a href="https://calorieninjas.com/api" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 inline-flex">CalorieNinjas <ExternalLink className="w-2.5 h-2.5" /></a>
+        </div>
       </div>
 
       {/* Save — weight excluded, only profile data */}
