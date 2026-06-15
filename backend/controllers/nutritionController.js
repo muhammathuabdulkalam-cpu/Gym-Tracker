@@ -86,7 +86,11 @@ Output:
         return res.json(results);
       }
     } catch (geminiErr) {
-      console.error('Gemini nutrition parser failed:', geminiErr.message);
+      console.error('Gemini nutrition parser failed:', geminiErr.response?.data || geminiErr.message);
+      const errMsg = geminiErr.response?.data?.error?.message || geminiErr.message || 'Unknown error';
+      return res.status(400).json({
+        message: `Gemini API Error: ${errMsg}. Please verify your API Key in Settings.`
+      });
     }
   }
 
