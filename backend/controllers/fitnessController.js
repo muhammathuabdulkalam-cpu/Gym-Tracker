@@ -28,6 +28,11 @@ exports.addOrUpdateData = async (req, res) => {
       await fitnessData.save();
     }
     
+    if (weight !== undefined && weight !== null && Number(weight) > 0) {
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(req.user.id, { weight: Number(weight) });
+    }
+    
     res.status(200).json(fitnessData);
   } catch (error) {
     res.status(500).json({ message: error.message });

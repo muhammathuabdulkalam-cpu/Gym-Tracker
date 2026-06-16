@@ -19,6 +19,12 @@ exports.saveWeightLog = async (req, res) => {
     } else {
       log = await WeightLog.create({ user: req.user.id, date, weight });
     }
+
+    if (weight !== undefined && weight !== null && Number(weight) > 0) {
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(req.user.id, { weight: Number(weight) });
+    }
+
     res.status(201).json(log);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
@@ -41,6 +47,12 @@ exports.updateWeightLog = async (req, res) => {
       { new: true }
     );
     if (!log) return res.status(404).json({ message: 'Log not found' });
+
+    if (weight !== undefined && weight !== null && Number(weight) > 0) {
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(req.user.id, { weight: Number(weight) });
+    }
+
     res.json(log);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };

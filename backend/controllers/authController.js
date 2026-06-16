@@ -10,14 +10,23 @@ const generateToken = (id) => {
 // Standard Registration
 exports.registerUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, name, age, weight, height, gender, dob } = req.body;
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'User already exists' });
 
     const salt = await bcrypt.genSalt(8); // 8 rounds = ~50ms, still bcrypt-secure
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await User.create({ email, password: hashedPassword });
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      name: name || '',
+      age: age ? Number(age) : undefined,
+      weight: weight ? Number(weight) : undefined,
+      height: height ? Number(height) : undefined,
+      gender: gender || 'male',
+      dob: dob || '',
+    });
     res.status(201).json({
       _id: user._id, email: user.email, name: user.name, age: user.age,
       weight: user.weight, height: user.height, gender: user.gender, dob: user.dob,
